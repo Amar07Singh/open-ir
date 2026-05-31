@@ -6,6 +6,7 @@ import { logger } from "@bb/logger";
 import { classifyFailure } from "./failure-classifier.ts";
 import { transitionState } from "./pull-helpers.ts";
 import { isGithubPayload, persistFailure } from "./run-helpers.ts";
+import { markRunOutcome, resetServerLogIfPreviousSucceeded } from "./log-lifecycle.ts";
 import { runLocal } from "./run-local.ts";
 import type { IngestRunnerDeps, IngestRunnerInput } from "#src/types/ingest-runner.ts";
 import type { IngestStrategy } from "#src/types/strategy.ts";
@@ -63,6 +64,9 @@ async function runGithub(
 ): Promise<PipelineSummary> {
   const { knowledgeId } = payload;
   clearCancellation(knowledgeId);
+  // Wipe-after-success: if the last run finished cleanly, start this one with a
+  // fresh server log. A previous failure is left intact for debugging.
+  resetServerLogIfPreviousSucceeded();
   const startedAt = Date.now();
   await transitionState(knowledgeId, KnowledgeState.Processing);
   const progressContext = progressContextFactory(knowledgeId);
@@ -70,6 +74,7 @@ async function runGithub(
   try {
     throwIfCancelled(knowledgeId);
     const branch = await resolveBranch(knowledgeId, payload, payload.gitToken);
+    logger.info(`pipeline/run: ▶ index started: ${payload.repoUrl} (knowledgeId=${knowledgeId}, branch=${branch})`);
     await knowledgeDb.setKnowledgeBranch(knowledgeId, branch);
     await knowledgeGraph.setKnowledgeBranchInGraph(knowledgeId, branch).catch(() => undefined);
 
@@ -158,6 +163,7 @@ async function runGithub(
         await ensureCommitDirs(location);
       }
       source = createDiskSourceReader({ repoDir, commitHash });
+      logger.info(`pipeline/run: ✓ cloned ${parsed.owner}/${parsed.repo}@${commitHash.slice(0, 12)}`);
     }
 
     progressContext.phaseChanged("scan");
@@ -208,6 +214,9 @@ async function runGithub(
     logger.info(
       `pipeline/run: ✓ github_index complete (knowledgeId=${knowledgeId}, commit=${commitHash.slice(0, 12)}, files=${result.filesAnalyzed}, folders=${result.foldersSummarised}, nodes=${result.graphNodesWritten}, ${totalMs}ms)`,
     );
+    // Graph is stored and state is PROCESSED — mark success so the NEXT run
+    // starts from a clean log.
+    markRunOutcome(true);
 
     return {
       filesAnalyzed: result.filesAnalyzed,
@@ -218,6 +227,8 @@ async function runGithub(
       tokenUsage: result.tokenUsage,
     };
   } catch (cause: unknown) {
+    // Not a success — keep this run's log on disk so the next run doesn't wipe it.
+    markRunOutcome(false);
     if (cause instanceof CancellationError) {
       clearCancellation(knowledgeId);
       logger.info(`pipeline/run: ingestion cancelled for ${knowledgeId}`);
@@ -232,6 +243,13 @@ async function runGithub(
     }
     const { category, reason, detail } = classifyFailure(cause);
     await persistFailure(knowledgeId, category, reason, detail);
+    // The actual failure — logged at ERROR with the cause (incl. stack) so a
+    // retried job reads as one clear, explained failure instead of silent
+    // repeats of the happy path.
+    logger.error(
+      `pipeline/run: ✗ index FAILED for ${knowledgeId} (category=${category}): ${reason}${detail !== undefined ? ` — ${detail}` : ""}`,
+      cause,
+    );
     if (!strategyStarted) {
       progressContext.failed(reason, undefined, category, detail);
     }

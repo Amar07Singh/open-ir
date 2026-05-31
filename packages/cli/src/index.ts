@@ -13,7 +13,7 @@ import { buildStatsCommand } from "./StatsCommand.ts";
 import { buildMcpCommand } from "./McpCommand.ts";
 import { buildSetupCommand } from "./SetupCommand.ts";
 import { buildMigrateCommand } from "./MigratePathsCommand.ts";
-import { error } from "./output.ts";
+import { presentThrownError } from "./diagnostics/present.ts";
 
 const VERSION = "0.0.0";
 
@@ -37,7 +37,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((cause: unknown) => {
-  const msg = cause instanceof Error ? cause.message : String(cause);
-  error(msg);
+  // Render the full remedy (✗ title + why + fix steps, plus a boot log tail when
+  // the error carries one) instead of a bare message. Falls back to a generic
+  // "check the logs" remedy for unrecognised errors.
+  presentThrownError(cause);
   process.exit(2);
 });

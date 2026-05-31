@@ -220,6 +220,7 @@
         "@bb/errors": "workspace:*",
         "@bb/graph-db": "workspace:*",
         "@bb/ingest-github": "workspace:*",
+        "@bb/logger": "workspace:*",
         "@bb/mcp": "workspace:*",
         "@bb/mongo": "workspace:*",
         "@bb/neo4j": "workspace:*",

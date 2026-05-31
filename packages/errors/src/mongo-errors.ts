@@ -1,3 +1,5 @@
+import { ErrorMessage } from "./messages.ts";
+
 export class MongoConfigError extends Error {
   override readonly name = "MongoConfigError";
   readonly hint: string;
@@ -21,7 +23,7 @@ export class MongoNotConnectedError extends Error {
   override readonly name = "MongoNotConnectedError";
 
   constructor() {
-    super("MongoDB client is not connected. Call connectMongo() first.");
+    super(ErrorMessage.MongoNotConnected);
   }
 }
 

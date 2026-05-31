@@ -1,3 +1,5 @@
+import { ErrorMessage } from "./messages.ts";
+
 export class Neo4jConfigError extends Error {
   override readonly name = "Neo4jConfigError";
   readonly hint: string;
@@ -21,7 +23,7 @@ export class Neo4jNotConnectedError extends Error {
   override readonly name = "Neo4jNotConnectedError";
 
   constructor() {
-    super("Neo4j driver is not connected. Call connectNeo4j() first.");
+    super(ErrorMessage.Neo4jNotConnected);
   }
 }
 

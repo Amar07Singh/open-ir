@@ -2,6 +2,7 @@ import { Command } from "commander";
 import React from "react";
 import { render } from "ink";
 import { HINTS } from "@bb/config";
+import { getLogger } from "@bb/logger";
 import { KEY_MAP, validKeysList } from "./keyMap.ts";
 import { SetupForm } from "./SetupForm.tsx";
 import { error, list, success } from "./output.ts";
@@ -39,6 +40,8 @@ async function runSet(key?: string, value?: string): Promise<void> {
   try {
     mappedKey.setter(value);
     success(`Set ${key} to ${mappedKey.redact ? "<redacted>" : value}`);
+    // Config milestone — key name only, never the value (may be a secret).
+    getLogger("cli").info(`set: config key "${key}" updated`);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     error(`Failed to set ${key}: ${message}`);

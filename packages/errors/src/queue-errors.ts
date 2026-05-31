@@ -1,8 +1,10 @@
+import { ErrorMessage } from "./messages.ts";
+
 export class QueueNotConnectedError extends Error {
   override readonly name = "QueueNotConnectedError";
 
   constructor() {
-    super("Queue is not connected. Call connectQueue() first.");
+    super(ErrorMessage.QueueNotConnected);
   }
 }
 

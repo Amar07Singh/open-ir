@@ -181,6 +181,11 @@ archiveSink?}` and `runPull` skips `syncRepository` + `materialiseEndpoints`
 - `concurrency.ts` — `withConcurrency(n)` returns a `limit(task)` function in
   the `p-limit` style. `runInPool(n, items, task)` is a convenience over async
   iterables. No external `p-limit` dependency.
+- `log-lifecycle.ts` — wipe-after-success state for the shared server log.
+  `markRunOutcome(succeeded)` records how a run ended; at the start of the next
+  run `resetServerLogIfPreviousSucceeded()` clears the log (via
+  `@bb/logger` `resetLogScope`) only if the previous run succeeded, so a failed
+  run's log survives for debugging. In-process flag, defaults to no-wipe.
 
 ## Imports allowed
 

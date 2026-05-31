@@ -1,3 +1,5 @@
+import { ErrorMessage } from "./messages.ts";
+
 export class RedisConfigError extends Error {
   override readonly name = "RedisConfigError";
   readonly hint: string;
@@ -21,7 +23,7 @@ export class RedisNotConnectedError extends Error {
   override readonly name = "RedisNotConnectedError";
 
   constructor() {
-    super("Redis client is not connected. Call connectRedis() first.");
+    super(ErrorMessage.RedisNotConnected);
   }
 }
 

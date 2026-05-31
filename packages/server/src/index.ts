@@ -13,6 +13,7 @@ import "@bb/sqlite";
 import "@bb/neo4j";
 import { registerGithubWorkers, registerLocalIngestWorker } from "@bb/ingest-github";
 import { LayoutMigrationRequiredError, ServerConfigError } from "@bb/errors";
+import { logger } from "@bb/logger";
 import { registerRoutes } from "./routes.ts";
 import { installShutdownHandlers } from "./shutdown.ts";
 
@@ -78,20 +79,26 @@ async function assertLayoutMigrated(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  logger.info("bytebell-server: starting up…");
   checkRequiredConfig();
   await assertLayoutMigrated();
   const dbProvider = getConfigValue(Config.DbProvider);
   await connectDb(dbProvider);
+  logger.info(`bytebell-server: ✓ database connected (provider=${dbProvider})`);
 
   await connectRedis();
+  logger.info("bytebell-server: ✓ redis connected");
 
   const graphProvider = getConfigValue(Config.GraphProvider);
   await connectGraph(graphProvider);
   await indexesGraph.ensureKnowledgeIndexes();
   await indexesGraph.ensureConceptGraphIndexes();
+  logger.info(`bytebell-server: ✓ graph connected (provider=${graphProvider}), indexes ensured`);
+
   await connectQueue();
   registerGithubWorkers();
   registerLocalIngestWorker();
+  logger.info("bytebell-server: ✓ queue connected, ingestion workers registered");
   installShutdownHandlers();
 
   const app = express();
@@ -100,7 +107,10 @@ async function main(): Promise<void> {
 
   const port = getConfigValue(Config.ServerPort);
   app.listen(port, "127.0.0.1", () => {
+    // stdout marker stays for humans tailing the file; readiness is detected
+    // by the CLI via the /health endpoint, not this line.
     process.stdout.write(`Bytebell server listening on http://127.0.0.1:${port}\n`);
+    logger.info(`bytebell-server: ✓ up and listening on http://127.0.0.1:${port}`);
   });
 
   await writeFile(path.join(getBytebellHome(), "pid"), String(process.pid), { mode: 0o644 });

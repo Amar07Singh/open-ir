@@ -8,6 +8,10 @@ package-level contract; this file documents how the source tree is split.
 - **[index.ts](index.ts)** — public re-exports. The only entry point other
   packages may import. Re-exports every error class from the per-area
   modules. Anything not re-exported here is internal.
+- **[messages.ts](messages.ts)** — the `ErrorMessage` string enum: the
+  static, fully-constant error-class messages (the four "…not connected…"
+  marker messages). Messages that interpolate a runtime value (ids, URIs,
+  paths, causes) stay inline at the throw site and are _not_ here.
 - **[config-errors.ts](config-errors.ts)** — errors thrown by callers of
   `@bb/config`. Today: `ConfigIncompleteError` (carries the missing
   `Config[]` and the corresponding `bytebell set …` hints). Type-only
@@ -69,17 +73,19 @@ package-level contract; this file documents how the source tree is split.
 
 ```
 config-errors.ts → @bb/types (type-only: Config)
-mongo-errors.ts  → (leaf — no imports)
-redis-errors.ts  → (leaf — no imports)
-queue-errors.ts  → (leaf — no imports)
+messages.ts      → (leaf — no imports)
+mongo-errors.ts  → messages.ts (ErrorMessage)
+redis-errors.ts  → messages.ts (ErrorMessage)
+queue-errors.ts  → messages.ts (ErrorMessage)
+neo4j-errors.ts  → messages.ts (ErrorMessage)
 llm-errors.ts    → (leaf — no imports)
 ingest-errors.ts → (leaf — no imports)
 server-errors.ts → (leaf — no imports)
-neo4j-errors.ts  → (leaf — no imports)
 index.ts         → re-exports all eight error modules
 ```
 
-No cross-file imports inside the package; no cycles possible.
+The only intra-package imports are the four adapter error modules pulling
+static text from `messages.ts`; no cycles possible.
 
 ## Invariants enforced here
 

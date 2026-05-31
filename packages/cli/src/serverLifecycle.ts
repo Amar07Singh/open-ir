@@ -2,14 +2,9 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { getBytebellHome } from "@bb/config";
-import {
-  ServerStartTimeoutError,
-  ServerInfraDownError,
-  ServerInfraUnreachableError,
-  ServerProcessExitedError,
-} from "@bb/errors";
 import { ensureServerRunning } from "./serverSpawn.ts";
-import { createSpinner, error } from "./output.ts";
+import { createSpinner } from "./output.ts";
+import { presentThrownError } from "./diagnostics/present.ts";
 
 const POLL_INTERVAL_MS = 500;
 const POLL_TIMEOUT_MS = 30_000;
@@ -98,20 +93,10 @@ export async function startServer(): Promise<boolean> {
     return true;
   } catch (cause: unknown) {
     spinner.stop(false, "Server startup failed");
-    if (cause instanceof ServerProcessExitedError) {
-      error(cause.message);
-      if (cause.logTail.length > 0) {
-        error(cause.logTail);
-      }
-    } else if (cause instanceof ServerInfraUnreachableError) {
-      error(`Infra not reachable: ${cause.services.map((s) => `${s.name} (${s.uri})`).join(", ")}. Is Docker running?`);
-    } else if (cause instanceof ServerInfraDownError) {
-      error(`Infra not reachable: ${cause.services.join(", ")}. Is Docker running?`);
-    } else if (cause instanceof ServerStartTimeoutError) {
-      error(cause.message);
-    } else {
-      error(cause instanceof Error ? cause.message : String(cause));
-    }
+    // The presenter resolves the right remedy per error type (timeout, infra
+    // unreachable/down, process-exited) and inlines the server log tail when the
+    // error carries one — strictly better than the per-type raw messages here.
+    presentThrownError(cause);
     process.exitCode = 1;
     return false;
   }

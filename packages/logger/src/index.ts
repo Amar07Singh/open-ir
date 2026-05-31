@@ -3,6 +3,7 @@ import { getLogger } from "./logger.ts";
 
 export {
   getLogger,
+  resetLogScope,
   seedLoggerFactory,
   shutdownLoggers,
   __isLoggerFactorySeeded,

@@ -24,6 +24,7 @@ type Logger                                          // re-exported from winston
 
 const logger: Logger                                 // proxy → getLogger("server")
 function getLogger(scope: LoggerScope): Logger
+function resetLogScope(scope: LoggerScope): void     // wipe scope's current log file + rebuild
 function seedLoggerFactory(factory: LoggerFactory): void
 function shutdownLoggers(): Promise<void>
 function getLogsDir(): string
@@ -49,6 +50,13 @@ and gets the original behaviour bit-for-bit.
 `getLogger("server").child({ worker: "pdf-1" })` — there is no per-worker file
 split.
 
+`resetLogScope(scope)` closes that scope's logger, truncates today's
+`<scope>-<date>.log` to zero, and drops the cache so the next `getLogger(scope)`
+opens a fresh stream. Used for "wipe after success" — clearing a completed run's
+log so the next run starts clean. The CLI's spawn redirect opens the same file
+with `O_APPEND`, which tolerates the truncation. Best-effort: a not-yet-created
+file is a no-op.
+
 ## Sugar log API
 
 `logger.info("message", obj)` auto-stringifies `obj` via `util.inspect` —
@@ -57,11 +65,11 @@ handled gracefully.
 
 ## File layout
 
-- `src/dirs.ts` — log dir resolution (under `getBytebellHome()/logs`)
+- `src/dirs.ts` — log dir resolution (under `getBytebellHome()/logs`) + `currentLogFile(scope)`
 - `src/caller.ts` — stack-walk `file:line` helper
 - `src/formats.ts` — sugar splat format + caller format + printf
 - `src/transports.ts` — daily-rotate file + console transport factories
-- `src/logger.ts` — `getLogger`, scope cache, shutdown
+- `src/logger.ts` — `getLogger`, `resetLogScope`, scope cache, shutdown
 - `src/index.ts` — public re-exports
 
 ## Invariants

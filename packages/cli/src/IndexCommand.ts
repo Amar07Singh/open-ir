@@ -3,9 +3,9 @@ import { Command } from "commander";
 import { Config } from "@bb/types";
 import { getConfigValue } from "@bb/config";
 import { ensureServerRunning } from "./serverSpawn.ts";
-import { ServerStartTimeoutError } from "@bb/errors";
-import { HttpClientError, postJson } from "./httpClient.ts";
+import { postJson } from "./httpClient.ts";
 import { createSpinner, error } from "./output.ts";
+import { presentThrownError } from "./diagnostics/present.ts";
 import { startLogTailer, type LogTailer } from "./logTailer.ts";
 import { pollIndexToCompletion, type IndexResponse } from "./indexPoller.ts";
 import { probeRepo } from "./repoProbe.ts";
@@ -73,12 +73,8 @@ async function runIndex(
 }
 
 function handleError(cause: unknown): void {
-  if (cause instanceof ServerStartTimeoutError) {
-    error(cause.message);
-  } else if (cause instanceof HttpClientError) {
-    error(cause.message);
-  } else {
-    error(cause instanceof Error ? cause.message : String(cause));
-  }
+  // Resolve and render the remedy (server-start timeout, HTTP failure, clone
+  // failure, …) with fix steps + any log tail, instead of a bare message.
+  presentThrownError(cause);
   process.exitCode = 1;
 }

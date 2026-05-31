@@ -22,3 +22,13 @@ export function getLogsDir(): string {
 export function ensureLogsDir(): void {
   fs.mkdirSync(getLogsDir(), { recursive: true, mode: DIR_MODE });
 }
+
+/**
+ * The file a given scope's daily-rotated transport is writing to *today*.
+ * Mirrors the `<scope>-<YYYY-MM-DD>.log` pattern in `makeFileTransport` and the
+ * spawn redirect in the CLI. Used by `resetLogScope` to wipe the active file.
+ */
+export function currentLogFile(scope: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return path.join(getLogsDir(), `${scope}-${today}.log`);
+}
