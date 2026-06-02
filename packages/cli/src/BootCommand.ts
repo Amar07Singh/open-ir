@@ -1,18 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH non-commercial-clause
+import path from "node:path";
+import { homedir } from "node:os";
 import { Command } from "commander";
-import { HINTS, isDevMode } from "@bb/config";
-import { getLogger } from "@bb/logger";
-import { checkPreflight, runBootSequence } from "./bootConfig.ts";
-import { error, info } from "./output.ts";
+import React from "react";
+import { render } from "ink";
+import { Config, DbProviderType, GraphProviderType } from "@bb/types";
+import { HINTS, getBytebellHome, getConfigValue, isDevMode } from "@bb/config";
+import { applyInfraDefaults, checkPreflight } from "./bootConfig.ts";
+import { SetupForm } from "./SetupForm.tsx";
+import { error, info, success } from "./output.ts";
+import { bringInfraUp, usingHonker } from "./bootInfra.ts";
 
 export function buildBootCommand(): Command {
   const cmd = new Command("boot");
-  cmd.description("Bring up Docker infra (mongo + neo4j + redis) and start the bytebell-server.").action(runBoot);
+  cmd
+    .description(
+      "Bring up Docker infra (mongo + neo4j + redis/honker per queue-provider) and start the bytebell-server.",
+    )
+    .action(runBoot);
   return cmd;
 }
 
+function expandTilde(p: string): string {
+  if (p === "~") {
+    return homedir();
+  }
+  if (p.startsWith("~/")) {
+    return path.join(homedir(), p.slice(2));
+  }
+  return p;
+}
+
 async function runBoot(): Promise<void> {
-  if (!enforcePreflight()) {
+  if (!(await ensurePreflight())) {
     process.exitCode = 1;
     return;
   }
@@ -21,25 +41,79 @@ async function runBoot(): Promise<void> {
     info(`dev mode: logs → ${process.cwd()}/logs/`);
   }
 
-  const cliLog = getLogger("cli");
-  cliLog.info("boot: bringing up Docker infra + bytebell-server…");
+  const defaults = applyInfraDefaults();
+  for (const entry of defaults.written) {
+    if (entry.redacted) {
+      success(`set ${entry.cliKey}=<redacted> (auto-generated)`);
+    } else {
+      success(`set ${entry.cliKey} (auto-filled with local-docker default)`);
+    }
+  }
 
-  if (!(await runBootSequence())) {
-    cliLog.warn("boot: sequence did not complete — see output above");
+  const dbProvider = getConfigValue(Config.DbProvider);
+  const graphProvider = getConfigValue(Config.GraphProvider);
+
+  if (graphProvider === GraphProviderType.Neo4j && defaults.neo4jPassword.length === 0) {
+    error("internal: neo4j password is empty after applyInfraDefaults — refusing to start docker.");
+    process.exitCode = 1;
     return;
   }
 
-  cliLog.info("boot: ✓ infra + server up");
+  const upResult = await bringInfraUp(defaults.neo4jPassword);
+  if (upResult === null) {
+    return;
+  }
+
+  if (usingHonker()) {
+    const queueDbPath = getConfigValue(Config.QueueDbPath);
+    const resolved = queueDbPath.length > 0 ? expandTilde(queueDbPath) : path.join(getBytebellHome(), "queue.db");
+    success(`queue  → honker (sqlite: ${resolved})`);
+  } else {
+    success(`redis  → ${upResult.services.redis}`);
+  }
+  if (dbProvider === DbProviderType.Mongo) {
+    success(`mongo  → ${upResult.services.mongo}`);
+  }
+  if (graphProvider === GraphProviderType.Neo4j) {
+    success(`neo4j  → ${upResult.services.neo4j}`);
+  }
+  success(`redis  → ${upResult.services.redis}`);
+
   process.stdout.write("\nNext: bytebell index <git-url>  or  bytebell ingest [path]\n");
 }
 
-function enforcePreflight(): boolean {
-  const result = checkPreflight();
-  if (result.ok) {
+async function ensurePreflight(): Promise<boolean> {
+  const initial = checkPreflight();
+  if (initial.ok) {
     return true;
   }
-  for (const entry of result.missing) {
+  if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
+    reportMissing(initial.missing);
+    return false;
+  }
+  info("Bytebell needs a few settings before first boot — opening setup form…");
+  const saved = await renderSetupForm();
+  if (!saved) {
+    return false;
+  }
+  const after = checkPreflight();
+  if (after.ok) {
+    return true;
+  }
+  reportMissing(after.missing);
+  return false;
+}
+
+function reportMissing(missing: ReturnType<typeof checkPreflight>["missing"]): void {
+  for (const entry of missing) {
     error(`${entry.hintKey} is not set`, HINTS[entry.configKey]);
   }
-  return false;
+}
+
+async function renderSetupForm(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onDone = (result: { saved: boolean }): void => resolve(result.saved);
+    const { waitUntilExit } = render(React.createElement(SetupForm, { onDone }));
+    waitUntilExit().catch(() => resolve(false));
+  });
 }

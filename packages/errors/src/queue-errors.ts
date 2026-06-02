@@ -12,7 +12,7 @@ export class QueueConnectError extends Error {
   override readonly name = "QueueConnectError";
 
   constructor(cause: unknown) {
-    super(`Failed to initialize BullMQ queues: ${describe(cause)}`);
+    super(`Failed to initialize queue: ${describe(cause)}`);
     this.cause = cause;
   }
 }

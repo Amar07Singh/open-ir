@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH non-commercial-clause
 import { randomBytes } from "node:crypto";
-import { Config } from "@bb/types";
+import { Config, QueueProviderType } from "@bb/types";
 import { getConfigValue, requiredKeysFor } from "@bb/config";
 import { bringInfraUp } from "./dockerBoot.ts";
 import { KEY_MAP } from "./keyMap.ts";
@@ -33,7 +33,11 @@ export interface ApplyDefaultsResult {
 
 export function applyInfraDefaults(): ApplyDefaultsResult {
   const written: { cliKey: string; redacted: boolean }[] = [];
+  const usingHonker = readString(Config.QueueProvider) === QueueProviderType.Honker;
   for (const entry of DEFAULTS) {
+    if (entry.configKey === Config.RedisUrl && usingHonker) {
+      continue;
+    }
     const current = readString(entry.configKey);
     if (current.length > 0) {
       continue;
